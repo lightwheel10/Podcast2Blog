@@ -69,3 +69,16 @@ export function formatTranscriptForGemini(transcript: TranscriptItem[]): string 
     .join('\n')
     .replace(/\[Music\]|\[Applause\]|\[Laughter\]/gi, '');
 }
+
+async function fetchTranscriptFallback(videoId: string) {
+  const response = await fetch(
+    `https://www.googleapis.com/youtube/v3/captions?part=snippet&videoId=${videoId}&key=${process.env.YOUTUBE_API_KEY}`
+  );
+  
+  if (!response.ok) {
+    throw new Error('Failed to fetch captions from YouTube API');
+  }
+  
+  const data = await response.json();
+  return data.items?.[0]?.snippet;
+}
