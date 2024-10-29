@@ -1,60 +1,45 @@
 import { NextResponse } from 'next/server';
+import { headers } from 'next/headers';
 import { YoutubeTranscript } from 'youtube-transcript';
+import { getVideoDetails } from '@/src/lib/youtube-service';
 
-const YOUTUBE_API_KEY = process.env.YOUTUBE_API_KEY;
-
-if (!YOUTUBE_API_KEY) {
-  throw new Error('Missing YOUTUBE_API_KEY environment variable');
-}
-
-interface VideoDetails {
-  snippet: {
-    title: string;
-    description: string;
-  };
-  contentDetails: {
-    duration: string;
-  };
+export async function OPTIONS() {
+  return NextResponse.json({}, {
+    headers: {
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    },
+  });
 }
 
 export async function POST(req: Request) {
-  let requestVideoId: string | undefined;
+  let videoId: string | undefined;
+  let origin: string = '*';
   
   try {
-    const { videoId } = await req.json();
-    requestVideoId = videoId;
-    
+    const headersList = await headers();
+    origin = headersList.get('origin') || '*';
+
+    const body = await req.json();
+    videoId = body.videoId;
+
     if (!videoId) {
-      return NextResponse.json({ error: 'Video ID is required' }, { status: 400 });
+      return NextResponse.json(
+        { error: 'Video ID is required' },
+        { 
+          status: 400,
+          headers: {
+            'Access-Control-Allow-Origin': origin,
+            'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+            'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+          }
+        }
+      );
     }
 
-    // 1. Fetch video details from YouTube API
-    const videoUrl = `https://www.googleapis.com/youtube/v3/videos?part=snippet,contentDetails&id=${videoId}&key=${YOUTUBE_API_KEY}`;
-    const videoResponse = await fetch(videoUrl);
-    const videoData = await videoResponse.json();
-
-    if (!videoResponse.ok || !videoData.items?.[0]) {
-      throw new Error('Failed to fetch video details');
-    }
-
-    const videoDetails: VideoDetails = videoData.items[0];
-
-    // 2. Fetch transcript using youtube-transcript with error handling
-    let transcript;
-    try {
-      transcript = await YoutubeTranscript.fetchTranscript(videoId, {
-        lang: 'en',
-      });
-
-      // Verify transcript data
-      if (!Array.isArray(transcript)) {
-        throw new Error('Invalid transcript format');
-      }
-
-    } catch (transcriptError) {
-      console.error('Transcript error:', transcriptError);
-      throw new Error('Failed to fetch transcript. Please ensure the video has captions enabled.');
-    }
+    const transcript = await YoutubeTranscript.fetchTranscript(videoId);
+    const videoDetails = await getVideoDetails(videoId);
 
     // Verify both data pieces exist before returning
     if (!transcript || !videoDetails) {
@@ -68,15 +53,24 @@ export async function POST(req: Request) {
       offset: item.offset || 0
     }));
 
-    return NextResponse.json({
-      transcript: formattedTranscript,
-      videoDetails
-    });
+    return NextResponse.json(
+      {
+        transcript: formattedTranscript,
+        videoDetails
+      },
+      {
+        headers: {
+          'Access-Control-Allow-Origin': origin,
+          'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+          'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+        }
+      }
+    );
     
   } catch (error) {
     console.error('Error:', {
       message: error instanceof Error ? error.message : 'Unknown error',
-      videoId: requestVideoId,
+      videoId: videoId ?? 'unknown',
       timestamp: new Date().toISOString()
     });
 
@@ -86,7 +80,14 @@ export async function POST(req: Request) {
           ? error.message 
           : 'Failed to fetch video data. Please try again.' 
       }, 
-      { status: 400 }
+      { 
+        status: 400,
+        headers: {
+          'Access-Control-Allow-Origin': origin,
+          'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+          'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+        }
+      }
     );
   }
 } 

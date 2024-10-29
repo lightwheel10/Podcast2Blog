@@ -6,13 +6,10 @@ interface TranscriptItem {
 
 export async function fetchTranscript(videoId: string): Promise<TranscriptItem[]> {
   const MAX_RETRIES = 3;
-  const BASE_URL = process.env.NEXT_PUBLIC_VERCEL_URL 
-    ? `https://${process.env.NEXT_PUBLIC_VERCEL_URL}` 
-    : 'http://localhost:3000';
 
   for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
     try {
-      const response = await fetch(`${BASE_URL}/api/transcript`, {
+      const response = await fetch('/api/transcript', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -27,12 +24,13 @@ export async function fetchTranscript(videoId: string): Promise<TranscriptItem[]
         
         // Try fallback on last attempt
         if (attempt === MAX_RETRIES) {
-          console.log('Attempting fallback method...');
-          const fallbackData = await fetchTranscriptFallback(videoId);
-          if (fallbackData) {
-            return fallbackData;
+          try {
+            console.log('Attempting fallback method...');
+            return await fetchTranscriptFallback(videoId);
+          } catch (fallbackError) {
+            console.error('Fallback method failed:', fallbackError);
+            throw new Error(data.error || 'Failed to fetch transcript');
           }
-          throw new Error(data.error || 'Failed to fetch transcript');
         }
         
         // Wait before retrying (exponential backoff)
@@ -53,16 +51,13 @@ export async function fetchTranscript(videoId: string): Promise<TranscriptItem[]
       if (attempt === MAX_RETRIES) {
         try {
           console.log('Attempting fallback method after error...');
-          const fallbackData = await fetchTranscriptFallback(videoId);
-          if (fallbackData) {
-            return fallbackData;
-          }
+          return await fetchTranscriptFallback(videoId);
         } catch (fallbackError) {
           console.error('Fallback method failed:', fallbackError);
+          throw error instanceof Error 
+            ? error 
+            : new Error('Failed to fetch transcript');
         }
-        throw error instanceof Error 
-          ? error 
-          : new Error('Failed to fetch transcript');
       }
       
       // Wait before retrying
@@ -73,33 +68,33 @@ export async function fetchTranscript(videoId: string): Promise<TranscriptItem[]
   throw new Error('Failed to fetch transcript after all retries');
 }
 
-// Make the fallback function private by removing 'async' keyword
-function fetchTranscriptFallback(videoId: string): Promise<TranscriptItem[]> {
+// Private fallback function
+async function fetchTranscriptFallback(videoId: string): Promise<TranscriptItem[]> {
   if (!process.env.YOUTUBE_API_KEY) {
     throw new Error('YouTube API key is not configured');
   }
 
-  return fetch(
+  const response = await fetch(
     `https://www.googleapis.com/youtube/v3/captions?part=snippet&videoId=${videoId}&key=${process.env.YOUTUBE_API_KEY}`
-  )
-    .then(async (response) => {
-      if (!response.ok) {
-        throw new Error('Failed to fetch captions from YouTube API');
-      }
-      const data = await response.json();
-      const caption = data.items?.[0]?.snippet;
-      
-      if (!caption) {
-        throw new Error('No captions found');
-      }
+  );
 
-      // Transform the YouTube API response to match TranscriptItem interface
-      return [{
-        text: caption.text || '',
-        duration: 0, // YouTube API doesn't provide duration
-        offset: 0    // YouTube API doesn't provide offset
-      }];
-    });
+  if (!response.ok) {
+    throw new Error('Failed to fetch captions from YouTube API');
+  }
+
+  const data = await response.json();
+  const caption = data.items?.[0]?.snippet;
+  
+  if (!caption) {
+    throw new Error('No captions found');
+  }
+
+  // Transform the YouTube API response to match TranscriptItem interface
+  return [{
+    text: caption.text || '',
+    duration: 0, // YouTube API doesn't provide duration
+    offset: 0    // YouTube API doesn't provide offset
+  }];
 }
 
 export function calculateTotalDuration(transcript: TranscriptItem[]): number {
