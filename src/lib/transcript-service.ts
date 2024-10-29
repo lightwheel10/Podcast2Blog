@@ -5,33 +5,101 @@ interface TranscriptItem {
 }
 
 export async function fetchTranscript(videoId: string): Promise<TranscriptItem[]> {
-  try {
-    const response = await fetch('/api/transcript', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ videoId }),
-    });
+  const MAX_RETRIES = 3;
+  const BASE_URL = process.env.NEXT_PUBLIC_VERCEL_URL 
+    ? `https://${process.env.NEXT_PUBLIC_VERCEL_URL}` 
+    : 'http://localhost:3000';
 
-    const data = await response.json();
+  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      const response = await fetch(`${BASE_URL}/api/transcript`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ videoId }),
+      });
 
-    if (!response.ok || data.error) {
-      throw new Error(data.error || 'Failed to fetch transcript');
+      const data = await response.json();
+
+      if (!response.ok || data.error) {
+        console.error(`Attempt ${attempt} failed:`, data.error);
+        
+        // Try fallback on last attempt
+        if (attempt === MAX_RETRIES) {
+          console.log('Attempting fallback method...');
+          const fallbackData = await fetchTranscriptFallback(videoId);
+          if (fallbackData) {
+            return fallbackData;
+          }
+          throw new Error(data.error || 'Failed to fetch transcript');
+        }
+        
+        // Wait before retrying (exponential backoff)
+        await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
+        continue;
+      }
+
+      // Verify transcript data exists and is an array
+      if (!Array.isArray(data.transcript)) {
+        throw new Error('Invalid transcript data received');
+      }
+
+      return data.transcript;
+    } catch (error) {
+      console.error(`Attempt ${attempt} error:`, error);
+      
+      // Try fallback on last attempt
+      if (attempt === MAX_RETRIES) {
+        try {
+          console.log('Attempting fallback method after error...');
+          const fallbackData = await fetchTranscriptFallback(videoId);
+          if (fallbackData) {
+            return fallbackData;
+          }
+        } catch (fallbackError) {
+          console.error('Fallback method failed:', fallbackError);
+        }
+        throw error instanceof Error 
+          ? error 
+          : new Error('Failed to fetch transcript');
+      }
+      
+      // Wait before retrying
+      await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
     }
-
-    // Verify transcript data exists and is an array
-    if (!Array.isArray(data.transcript)) {
-      throw new Error('Invalid transcript data received');
-    }
-
-    return data.transcript;
-  } catch (error) {
-    console.error('Error fetching transcript:', error);
-    throw error instanceof Error 
-      ? error 
-      : new Error('Failed to fetch transcript');
   }
+
+  throw new Error('Failed to fetch transcript after all retries');
+}
+
+// Make the fallback function private by removing 'async' keyword
+function fetchTranscriptFallback(videoId: string): Promise<TranscriptItem[]> {
+  if (!process.env.YOUTUBE_API_KEY) {
+    throw new Error('YouTube API key is not configured');
+  }
+
+  return fetch(
+    `https://www.googleapis.com/youtube/v3/captions?part=snippet&videoId=${videoId}&key=${process.env.YOUTUBE_API_KEY}`
+  )
+    .then(async (response) => {
+      if (!response.ok) {
+        throw new Error('Failed to fetch captions from YouTube API');
+      }
+      const data = await response.json();
+      const caption = data.items?.[0]?.snippet;
+      
+      if (!caption) {
+        throw new Error('No captions found');
+      }
+
+      // Transform the YouTube API response to match TranscriptItem interface
+      return [{
+        text: caption.text || '',
+        duration: 0, // YouTube API doesn't provide duration
+        offset: 0    // YouTube API doesn't provide offset
+      }];
+    });
 }
 
 export function calculateTotalDuration(transcript: TranscriptItem[]): number {
@@ -68,17 +136,4 @@ export function formatTranscriptForGemini(transcript: TranscriptItem[]): string 
     .map(item => item.text)
     .join('\n')
     .replace(/\[Music\]|\[Applause\]|\[Laughter\]/gi, '');
-}
-
-async function fetchTranscriptFallback(videoId: string) {
-  const response = await fetch(
-    `https://www.googleapis.com/youtube/v3/captions?part=snippet&videoId=${videoId}&key=${process.env.YOUTUBE_API_KEY}`
-  );
-  
-  if (!response.ok) {
-    throw new Error('Failed to fetch captions from YouTube API');
-  }
-  
-  const data = await response.json();
-  return data.items?.[0]?.snippet;
 }
