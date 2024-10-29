@@ -1,63 +1,52 @@
-import { YoutubeTranscript } from 'youtube-transcript';
 import { NextResponse } from 'next/server';
+import { YoutubeTranscript } from 'youtube-transcript';
 import { supabase } from '@/src/lib/supabase';
 
 export async function POST(req: Request) {
   try {
     const { url } = await req.json();
     
-    // Extract video ID from URL
-    const videoId = url.match(/(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})/)?.[1];
+    const video_id = url.match(/(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})/)?.[1];
     
-    if (!videoId) {
+    if (!video_id) {
       return NextResponse.json(
         { error: 'Invalid YouTube URL' },
         { status: 400 }
       );
     }
 
-    // Fetch video details from YouTube API
-    const response = await fetch(
-      `https://www.googleapis.com/youtube/v3/videos?part=snippet,contentDetails&id=${videoId}&key=${process.env.GOOGLE_API_KEY}`
+    const oembedResponse = await fetch(
+      `https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v=${video_id}&format=json`
     );
     
-    const data = await response.json();
-    
-    if (!data.items?.length) {
-      return NextResponse.json(
-        { error: 'Video not found' },
-        { status: 404 }
-      );
+    const videoData = await oembedResponse.json();
+    const transcript = await YoutubeTranscript.fetchTranscript(video_id);
+    const transcriptText = transcript.map(item => item.text).join(' ');
+    const duration = transcript.reduce((acc, item) => acc + (item.duration || 0), 0);
+
+    const videoDetails = {
+      title: videoData.title,
+      duration: duration,
+      video_id: video_id,
+      youtube_url: url,
+      transcript: transcriptText
+    };
+
+    const { error: dbError } = await supabase
+      .from('videos')
+      .insert([videoDetails]);
+
+    if (dbError) {
+      console.error('Database Error:', dbError);
+      throw dbError;
     }
 
-    // Get video transcript
-    const transcript = await YoutubeTranscript.fetchTranscript(videoId);
-    const transcriptText = transcript
-      .map(item => item.text)
-      .join(' ');
-
-    // Save to Supabase
-    const { data: video, error } = await supabase
-      .from('videos')
-      .insert([
-        {
-          youtube_url: url,
-          video_id: videoId,
-          title: data.items[0].snippet.title,
-          duration: data.items[0].contentDetails.duration,
-          transcript: transcriptText
-        }
-      ])
-      .select()
-      .single();
-
-    if (error) throw error;
-
-    return NextResponse.json(video);
+    return NextResponse.json(videoDetails);
+    
   } catch (error) {
     console.error('API Error:', error);
     return NextResponse.json(
-      { error: 'Failed to process video' },
+      { error: error instanceof Error ? error.message : 'Failed to process video' },
       { status: 500 }
     );
   }

@@ -24,14 +24,14 @@ interface VideoCardProps {
   id: string
   title: string
   duration: number
-  videoId: string
+  video_id: string
+  thumbnailUrl: string | null
 }
 
-export function VideoCard({ id, title, duration, videoId }: VideoCardProps) {
+export function VideoCard({ id, title, duration, video_id, thumbnailUrl }: VideoCardProps) {
   const router = useRouter()
   const [isDeleting, setIsDeleting] = useState(false)
-  const thumbnailUrl = `https://img.youtube.com/vi/${videoId}/maxresdefault.jpg`
-  const youtubeUrl = `https://youtube.com/watch?v=${videoId}`
+  const youtubeUrl = `https://youtube.com/watch?v=${video_id}`
 
   const handleDelete = async () => {
     setIsDeleting(true)
@@ -57,7 +57,7 @@ export function VideoCard({ id, title, duration, videoId }: VideoCardProps) {
         <div className="flex gap-4">
           <div className="relative w-48 h-28 rounded-lg overflow-hidden group flex-shrink-0">
             <Image
-              src={thumbnailUrl}
+              src={thumbnailUrl || '/placeholder.jpg'}
               alt={title}
               fill
               className="object-cover transition-transform group-hover:scale-105"

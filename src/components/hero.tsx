@@ -31,7 +31,7 @@ export function Hero() {
               youtube_url: youtubeUrl,
               title: videoDetails.title,
               duration: videoDetails.duration,
-              video_id: videoDetails.videoId,
+              video_id: videoDetails.video_id,
               transcript: videoDetails.transcript
             }
           ])

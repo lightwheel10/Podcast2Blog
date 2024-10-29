@@ -1,7 +1,8 @@
 export interface VideoDetails {
   title: string;
   duration: number;
-  videoId: string;
+  video_id: string;
+  youtube_url: string;
   transcript: string;
 }
 
@@ -15,12 +16,12 @@ export async function getVideoDetails(url: string): Promise<VideoDetails> {
       body: JSON.stringify({ url }),
     });
 
+    const data = await response.json();
+
     if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.message || 'Failed to process video');
+      throw new Error(data.error || 'Failed to process video');
     }
 
-    const data = await response.json();
     return data;
   } catch (error) {
     console.error('Error fetching video details:', error);
