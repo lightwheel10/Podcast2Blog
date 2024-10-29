@@ -4,7 +4,7 @@ interface TranscriptItem {
   offset: number;
 }
 
-export async function fetchTranscript(videoId: string) {
+export async function fetchTranscript(videoId: string): Promise<TranscriptItem[]> {
   try {
     const response = await fetch('/api/transcript', {
       method: 'POST',
@@ -14,16 +14,23 @@ export async function fetchTranscript(videoId: string) {
       body: JSON.stringify({ videoId }),
     });
 
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.message || 'Failed to fetch transcript');
+    const data = await response.json();
+
+    if (!response.ok || data.error) {
+      throw new Error(data.error || 'Failed to fetch transcript');
     }
 
-    const data = await response.json();
+    // Verify transcript data exists and is an array
+    if (!Array.isArray(data.transcript)) {
+      throw new Error('Invalid transcript data received');
+    }
+
     return data.transcript;
   } catch (error) {
     console.error('Error fetching transcript:', error);
-    throw error;
+    throw error instanceof Error 
+      ? error 
+      : new Error('Failed to fetch transcript');
   }
 }
 
@@ -54,4 +61,11 @@ export function extractVideoId(url: string): string | null {
     if (match) return match[1];
   }
   return null;
+}
+
+export function formatTranscriptForGemini(transcript: TranscriptItem[]): string {
+  return transcript
+    .map(item => item.text)
+    .join('\n')
+    .replace(/\[Music\]|\[Applause\]|\[Laughter\]/gi, '');
 }
