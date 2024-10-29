@@ -33,6 +33,7 @@ interface YouTubeCaptionResponse {
 
 export async function fetchTranscript(videoId: string): Promise<TranscriptItem[]> {
   const MAX_RETRIES = 3;
+  let lastError: Error | null = null;
 
   for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
     try {
@@ -44,62 +45,50 @@ export async function fetchTranscript(videoId: string): Promise<TranscriptItem[]
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({ videoId }),
-        cache: 'no-cache',
-        credentials: 'same-origin',
       });
 
-      console.log(`Response status:`, response.status);
       const data = await response.json();
-      console.log(`Response data:`, data);
 
       if (!response.ok || data.error) {
-        console.error(`Attempt ${attempt} failed:`, data.error);
-        
-        if (attempt === MAX_RETRIES) {
-          console.log('Trying direct YouTube API approach...');
-          const transcriptData = await fetchYouTubeTranscript(videoId);
-          if (transcriptData) {
-            return transcriptData;
-          }
-        }
-        
-        await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
-        continue;
+        throw new Error(data.error || 'Failed to fetch transcript');
       }
 
-      if (!Array.isArray(data.transcript)) {
+      if (!data.transcript || !Array.isArray(data.transcript)) {
         throw new Error('Invalid transcript data received');
       }
 
       return data.transcript;
+
     } catch (error) {
-      console.error(`Attempt ${attempt} error:`, error);
+      lastError = error instanceof Error ? error : new Error('Unknown error');
+      console.error(`Attempt ${attempt} failed:`, lastError.message);
       
+      // Try YouTube API fallback on last attempt
       if (attempt === MAX_RETRIES) {
         try {
-          console.log('Trying direct YouTube API approach after error...');
-          const transcriptData = await fetchYouTubeTranscript(videoId);
-          if (transcriptData) {
-            return transcriptData;
-          }
-        } catch (apiError) {
-          console.error('Direct API approach failed:', apiError);
+          console.log('Attempting YouTube API fallback...');
+          return await fetchYouTubeTranscript(videoId);
+        } catch (fallbackError) {
+          console.error('YouTube API fallback failed:', fallbackError);
+          throw lastError;
         }
       }
       
-      await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
+      await new Promise(resolve => setTimeout(resolve, 1000 * Math.pow(2, attempt - 1)));
     }
   }
 
-  throw new Error('Failed to fetch transcript after all retries');
+  throw lastError || new Error('Failed to fetch transcript after all retries');
 }
 
 async function fetchYouTubeTranscript(videoId: string): Promise<TranscriptItem[]> {
-  const apiKey = process.env.NEXT_PUBLIC_YOUTUBE_API_KEY;
-  if (!apiKey) {
-    throw new Error('YouTube API key is required');
+  if (!process.env.NEXT_PUBLIC_YOUTUBE_API_KEY) {
+    throw new Error('YouTube API key is required for fallback method');
   }
 
+  const apiKey = process.env.NEXT_PUBLIC_YOUTUBE_API_KEY;
+  
+  // First, get the caption tracks
   const captionsResponse = await fetch(
     `https://youtube.googleapis.com/youtube/v3/captions?` +
     `part=snippet&videoId=${videoId}&key=${apiKey}`
@@ -109,18 +98,19 @@ async function fetchYouTubeTranscript(videoId: string): Promise<TranscriptItem[]
     throw new Error('Failed to fetch captions from YouTube API');
   }
 
-  const captionsData = (await captionsResponse.json()) as YouTubeCaptionResponse;
+  const captionsData = await captionsResponse.json() as YouTubeCaptionResponse;
   console.log('Available captions:', captionsData);
 
   // Get the first English caption track or any caption track if English isn't available
-  const captionTrack = captionsData.items.find(
-    (item: YouTubeCaptionItem) => item.snippet.language === 'en'
-  ) || captionsData.items[0];
+  const captionTrack = captionsData.items?.find(
+    (item) => item.snippet.language === 'en'
+  ) || captionsData.items?.[0];
 
   if (!captionTrack) {
     throw new Error('No caption tracks found');
   }
 
+  // Get the actual transcript content
   const transcriptResponse = await fetch(
     `https://youtube.googleapis.com/youtube/v3/captions/${captionTrack.id}?key=${apiKey}`
   );
@@ -131,10 +121,11 @@ async function fetchYouTubeTranscript(videoId: string): Promise<TranscriptItem[]
 
   const transcriptData = await transcriptResponse.json();
 
+  // Format the response to match TranscriptItem interface
   return [{
     text: transcriptData.text || '',
-    duration: 0,
-    offset: 0
+    duration: 0, // YouTube API doesn't provide duration
+    offset: 0    // YouTube API doesn't provide offset
   }];
 }
 

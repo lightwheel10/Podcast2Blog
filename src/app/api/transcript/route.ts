@@ -26,110 +26,55 @@ export async function POST(req: Request) {
     if (!videoId) {
       return NextResponse.json(
         { error: 'Video ID is required' },
-        { 
-          status: 400,
-          headers: {
-            'Access-Control-Allow-Origin': origin,
-            'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-            'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-          }
-        }
+        { status: 400, headers: corsHeaders(origin) }
       );
     }
 
-    console.log('Fetching transcript for video:', videoId);
-
+    console.log('Attempting to fetch transcript for:', videoId);
+    
     try {
-      const transcript = await YoutubeTranscript.fetchTranscript(videoId, {
-        lang: 'en'  // Only specify language
-      });
-
-      console.log('Transcript fetch successful:', !!transcript);
-
-      if (!transcript || !Array.isArray(transcript)) {
-        throw new Error('Invalid transcript data received from YouTube');
+      const transcript = await YoutubeTranscript.fetchTranscript(videoId);
+      
+      if (!transcript || transcript.length === 0) {
+        throw new Error('No transcript data available');
       }
 
-      // Format transcript data
+      console.log('Transcript fetch successful, length:', transcript.length);
+
       const formattedTranscript = transcript.map(item => ({
-        text: item.text || '',
-        duration: item.duration || 0,
-        offset: item.offset || 0
+        text: item.text,
+        duration: item.duration,
+        offset: item.offset
       }));
 
       return NextResponse.json(
         { transcript: formattedTranscript },
-        {
-          headers: {
-            'Access-Control-Allow-Origin': origin,
-            'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-            'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-          }
-        }
+        { headers: corsHeaders(origin) }
       );
 
     } catch (transcriptError) {
-      console.error('Transcript fetch error:', transcriptError);
-      
-      // If transcript fetch fails, try YouTube API directly
-      if (process.env.YOUTUBE_API_KEY) {
-        try {
-          console.log('Attempting YouTube API fallback...');
-          const response = await fetch(
-            `https://www.googleapis.com/youtube/v3/captions?` +
-            `part=snippet&videoId=${videoId}&key=${process.env.YOUTUBE_API_KEY}`
-          );
-
-          if (response.ok) {
-            const data = await response.json();
-            if (data.items?.[0]?.snippet) {
-              return NextResponse.json(
-                { 
-                  transcript: [{
-                    text: data.items[0].snippet.text || '',
-                    duration: 0,
-                    offset: 0
-                  }]
-                },
-                {
-                  headers: {
-                    'Access-Control-Allow-Origin': origin,
-                    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-                    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-                  }
-                }
-              );
-            }
-          }
-        } catch (fallbackError) {
-          console.error('YouTube API fallback failed:', fallbackError);
-        }
-      }
-      
+      console.error('YouTube transcript fetch failed:', transcriptError);
       throw transcriptError;
     }
     
   } catch (error) {
     console.error('API Error:', {
       message: error instanceof Error ? error.message : 'Unknown error',
-      videoId: videoId ?? 'unknown',
+      videoId,
       timestamp: new Date().toISOString()
     });
 
     return NextResponse.json(
-      { 
-        error: error instanceof Error 
-          ? error.message 
-          : 'Failed to fetch video data. Please try again.' 
-      }, 
-      { 
-        status: 400,
-        headers: {
-          'Access-Control-Allow-Origin': origin,
-          'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-          'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-        }
-      }
+      { error: error instanceof Error ? error.message : 'Failed to fetch transcript' },
+      { status: 400, headers: corsHeaders(origin) }
     );
   }
+}
+
+function corsHeaders(origin: string) {
+  return {
+    'Access-Control-Allow-Origin': origin,
+    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+  };
 } 
