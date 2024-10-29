@@ -82,7 +82,8 @@ export async function fetchTranscript(videoId: string): Promise<TranscriptItem[]
 }
 
 async function fetchYouTubeTranscript(videoId: string): Promise<TranscriptItem[]> {
-  const apiKey = process.env.YOUTUBE_API_KEY;
+  // Use NEXT_PUBLIC_ prefix since this runs on client
+  const apiKey = process.env.NEXT_PUBLIC_YOUTUBE_API_KEY;
   
   if (!apiKey) {
     console.error('YouTube API key not found in environment');

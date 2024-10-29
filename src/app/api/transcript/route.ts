@@ -56,7 +56,7 @@ export async function POST(req: Request) {
       
     // If we get here, either no transcript was found or there was an error
     // Try YouTube API fallback
-    const apiKey = process.env.YOUTUBE_API_KEY;
+    const apiKey = process.env.NEXT_PUBLIC_YOUTUBE_API_KEY;
     if (!apiKey) {
       throw new Error('YouTube API key not configured');
     }
