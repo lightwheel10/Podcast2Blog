@@ -7,10 +7,6 @@ interface TranscriptItem {
   duration: number;
 }
 
-interface TranscriptConfig {
-  lang?: string;
-}
-
 async function fetchTranscriptWithRetry(videoId: string, retries = 3): Promise<TranscriptItem[]> {
   for (let i = 0; i < retries; i++) {
     try {
