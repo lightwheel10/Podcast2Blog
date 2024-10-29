@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server';
 import { headers } from 'next/headers';
 import { YoutubeTranscript } from 'youtube-transcript';
-import { getVideoDetails } from '@/src/lib/youtube-service';
 
 export async function OPTIONS() {
   return NextResponse.json({}, {
@@ -38,37 +37,80 @@ export async function POST(req: Request) {
       );
     }
 
-    const transcript = await YoutubeTranscript.fetchTranscript(videoId);
-    const videoDetails = await getVideoDetails(videoId);
+    console.log('Fetching transcript for video:', videoId);
 
-    // Verify both data pieces exist before returning
-    if (!transcript || !videoDetails) {
-      throw new Error('Failed to fetch complete video data');
-    }
+    try {
+      const transcript = await YoutubeTranscript.fetchTranscript(videoId, {
+        lang: 'en'  // Only specify language
+      });
 
-    // Format transcript data
-    const formattedTranscript = transcript.map(item => ({
-      text: item.text || '',
-      duration: item.duration || 0,
-      offset: item.offset || 0
-    }));
+      console.log('Transcript fetch successful:', !!transcript);
 
-    return NextResponse.json(
-      {
-        transcript: formattedTranscript,
-        videoDetails
-      },
-      {
-        headers: {
-          'Access-Control-Allow-Origin': origin,
-          'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-          'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+      if (!transcript || !Array.isArray(transcript)) {
+        throw new Error('Invalid transcript data received from YouTube');
+      }
+
+      // Format transcript data
+      const formattedTranscript = transcript.map(item => ({
+        text: item.text || '',
+        duration: item.duration || 0,
+        offset: item.offset || 0
+      }));
+
+      return NextResponse.json(
+        { transcript: formattedTranscript },
+        {
+          headers: {
+            'Access-Control-Allow-Origin': origin,
+            'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+            'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+          }
+        }
+      );
+
+    } catch (transcriptError) {
+      console.error('Transcript fetch error:', transcriptError);
+      
+      // If transcript fetch fails, try YouTube API directly
+      if (process.env.YOUTUBE_API_KEY) {
+        try {
+          console.log('Attempting YouTube API fallback...');
+          const response = await fetch(
+            `https://www.googleapis.com/youtube/v3/captions?` +
+            `part=snippet&videoId=${videoId}&key=${process.env.YOUTUBE_API_KEY}`
+          );
+
+          if (response.ok) {
+            const data = await response.json();
+            if (data.items?.[0]?.snippet) {
+              return NextResponse.json(
+                { 
+                  transcript: [{
+                    text: data.items[0].snippet.text || '',
+                    duration: 0,
+                    offset: 0
+                  }]
+                },
+                {
+                  headers: {
+                    'Access-Control-Allow-Origin': origin,
+                    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+                    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+                  }
+                }
+              );
+            }
+          }
+        } catch (fallbackError) {
+          console.error('YouTube API fallback failed:', fallbackError);
         }
       }
-    );
+      
+      throw transcriptError;
+    }
     
   } catch (error) {
-    console.error('Error:', {
+    console.error('API Error:', {
       message: error instanceof Error ? error.message : 'Unknown error',
       videoId: videoId ?? 'unknown',
       timestamp: new Date().toISOString()
