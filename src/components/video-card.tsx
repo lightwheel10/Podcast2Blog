@@ -39,6 +39,8 @@ export function VideoCard({ id, title, duration, video_id, thumbnailUrl }: Video
   const handleDelete = async () => {
     setIsDeleting(true)
     try {
+      router.push('/');
+      
       const result = await deleteVideo(id)
       if (!result.success) {
         toast.error(result.error || "Failed to delete video")
@@ -46,7 +48,6 @@ export function VideoCard({ id, title, duration, video_id, thumbnailUrl }: Video
       }
 
       toast.success("Video deleted successfully")
-      router.replace('/')
     } catch {
       toast.error("An error occurred while deleting the video")
     } finally {

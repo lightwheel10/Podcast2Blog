@@ -1,5 +1,3 @@
-import { YoutubeTranscript } from 'youtube-transcript';
-
 interface TranscriptItem {
   text: string;
   duration: number;
@@ -8,7 +6,21 @@ interface TranscriptItem {
 
 export async function fetchTranscript(videoId: string) {
   try {
-    return await YoutubeTranscript.fetchTranscript(videoId);
+    const response = await fetch('/api/transcript', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ videoId }),
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.message || 'Failed to fetch transcript');
+    }
+
+    const data = await response.json();
+    return data.transcript;
   } catch (error) {
     console.error('Error fetching transcript:', error);
     throw error;

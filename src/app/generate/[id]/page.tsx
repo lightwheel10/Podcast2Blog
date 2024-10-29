@@ -1,7 +1,7 @@
 import { BlogEditor } from '@/src/components/blog-editor';
 import { VideoCard } from '@/src/components/video-card';
 import { supabase } from '@/src/lib/supabase';
-import { notFound } from 'next/navigation';
+import { notFound, redirect } from 'next/navigation';
 
 interface PageProps {
   params: Promise<{
@@ -16,7 +16,7 @@ export default async function GeneratePage({
   const id = resolvedParams.id;
 
   if (!id || typeof id !== 'string') {
-    notFound();
+    return notFound();
   }
 
   const { data: video, error } = await supabase
@@ -25,11 +25,8 @@ export default async function GeneratePage({
     .eq('id', id)
     .single();
 
-  console.log('Fetched video data:', video);
-
   if (error || !video) {
-    console.error('Error fetching video:', error);
-    notFound();
+    redirect('/');
   }
 
   const thumbnailUrl = video.video_id 

@@ -4,7 +4,6 @@ import { Button } from "@/src/ui/button"
 import { Input } from "@/src/ui/input"
 import { useState, useTransition } from "react"
 import { motion } from "framer-motion"
-import { getVideoDetails } from "@/src/lib/youtube-service"
 import { supabase } from "@/src/lib/supabase"
 import { toast } from "sonner"
 import { useRouter } from "next/navigation"
@@ -25,12 +24,24 @@ export function Hero() {
       try {
         const videoId = extractVideoId(youtubeUrl);
         if (!videoId) {
-          throw new Error('Invalid YouTube URL');
+          toast.error('Invalid YouTube URL');
+          return;
         }
 
+        const transcriptToastId = toast.loading('Fetching transcript...');
         const transcript = await fetchTranscript(videoId);
+        
+        if (!transcript) {
+          toast.dismiss(transcriptToastId);
+          toast.error('Failed to fetch transcript');
+          return;
+        }
+
         const duration = calculateTotalDuration(transcript);
         const title = extractTitleFromTranscript(transcript);
+        
+        toast.dismiss(transcriptToastId);
+        const savingToastId = toast.loading('Saving video data...');
         
         const { data, error } = await supabase
           .from('videos')
@@ -46,14 +57,19 @@ export function Hero() {
           .select()
           .single();
 
-        if (error) throw error;
+        if (error) {
+          toast.dismiss(savingToastId);
+          throw error;
+        }
 
+        toast.dismiss(savingToastId);
         toast.success('Video processed successfully!');
         setVideoId(data.id);
         setIsProcessed(true);
         
       } catch (error) {
         console.error('Error processing video:', error);
+        toast.dismiss();
         toast.error(
           error instanceof Error 
             ? error.message 
