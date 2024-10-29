@@ -16,15 +16,17 @@ export async function getVideoDetails(url: string): Promise<VideoDetails> {
       body: JSON.stringify({ url }),
     });
 
-    const data = await response.json();
-
     if (!response.ok) {
+      const data = await response.json();
       throw new Error(data.error || 'Failed to process video');
     }
 
-    return data;
+    const data = await response.json();
+    return data as VideoDetails;
   } catch (error) {
     console.error('Error fetching video details:', error);
-    throw error;
+    throw error instanceof Error 
+      ? error 
+      : new Error('Failed to process video');
   }
 } 

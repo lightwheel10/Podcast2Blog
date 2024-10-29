@@ -25,6 +25,8 @@ export default async function GeneratePage({
     .eq('id', id)
     .single();
 
+  console.log('Fetched video data:', video);
+
   if (error || !video) {
     console.error('Error fetching video:', error);
     notFound();
@@ -39,8 +41,8 @@ export default async function GeneratePage({
       <h1 className="text-3xl font-bold">Generate Blog Post</h1>
       
       <VideoCard
-        title={video.title}
-        duration={video.duration}
+        title={video.title || 'Untitled Video'}
+        duration={video.duration || 0}
         video_id={video.video_id}
         id={video.id}
         thumbnailUrl={thumbnailUrl}

@@ -2,7 +2,7 @@
 
 import { Card, CardContent } from "@/src/ui/card"
 import { Button } from "@/src/ui/button"
-import { TrashIcon, ExternalLinkIcon } from "@radix-ui/react-icons"
+import { TrashIcon, ExternalLinkIcon, ClockIcon } from "@radix-ui/react-icons"
 import Image from "next/image"
 import { useState } from "react"
 import { deleteVideo } from "@/src/app/actions"
@@ -33,6 +33,9 @@ export function VideoCard({ id, title, duration, video_id, thumbnailUrl }: Video
   const [isDeleting, setIsDeleting] = useState(false)
   const youtubeUrl = `https://youtube.com/watch?v=${video_id}`
 
+  const displayTitle = title || 'Untitled Video'
+  const displayDuration = duration ? Math.floor(duration / 60) : 0
+
   const handleDelete = async () => {
     setIsDeleting(true)
     try {
@@ -58,7 +61,7 @@ export function VideoCard({ id, title, duration, video_id, thumbnailUrl }: Video
           <div className="relative w-48 h-28 rounded-lg overflow-hidden group flex-shrink-0">
             <Image
               src={thumbnailUrl || '/placeholder.jpg'}
-              alt={title}
+              alt={displayTitle}
               fill
               className="object-cover transition-transform group-hover:scale-105"
               priority
@@ -71,13 +74,15 @@ export function VideoCard({ id, title, duration, video_id, thumbnailUrl }: Video
                 className="text-white flex items-center gap-1 text-sm hover:text-blue-400 transition-colors"
               >
                 Watch on YouTube
-                <ExternalLinkIcon className="h-3 w-3" />
+                <ExternalLinkIcon className="h-4 w-4" />
               </a>
             </div>
           </div>
           <div className="flex-1 min-w-0">
             <div className="flex justify-between items-start gap-2">
-              <h2 className="text-lg font-semibold leading-tight truncate">{title}</h2>
+              <h2 className="text-xl font-bold leading-tight truncate">
+                {displayTitle}
+              </h2>
               <AlertDialog>
                 <AlertDialogTrigger asChild>
                   <Button 
@@ -86,7 +91,7 @@ export function VideoCard({ id, title, duration, video_id, thumbnailUrl }: Video
                     disabled={isDeleting}
                     className="hover:bg-destructive hover:text-destructive-foreground"
                   >
-                    <TrashIcon className="h-3 w-3" />
+                    <TrashIcon className="h-4 w-4" />
                   </Button>
                 </AlertDialogTrigger>
                 <AlertDialogContent>
@@ -109,9 +114,10 @@ export function VideoCard({ id, title, duration, video_id, thumbnailUrl }: Video
                 </AlertDialogContent>
               </AlertDialog>
             </div>
-            <p className="text-xs text-muted-foreground mt-1">
-              Duration: {Math.floor(duration / 60)} minutes
-            </p>
+            <div className="flex items-center gap-1 mt-2 text-sm text-muted-foreground">
+              <ClockIcon className="h-4 w-4" />
+              <span>{displayDuration} minutes</span>
+            </div>
           </div>
         </div>
       </CardContent>

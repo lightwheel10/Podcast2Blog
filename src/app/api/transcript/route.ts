@@ -5,94 +5,94 @@ import { supabase } from '@/src/lib/supabase';
 interface TranscriptItem {
   text: string;
   duration: number;
+  offset: number;
 }
 
-async function fetchTranscriptWithRetry(videoId: string, retries = 3): Promise<TranscriptItem[]> {
-  for (let i = 0; i < retries; i++) {
-    try {
-      const methods = [
-        () => YoutubeTranscript.fetchTranscript(videoId),
-        () => YoutubeTranscript.fetchTranscript(videoId, { lang: 'en' }),
-        () => YoutubeTranscript.fetchTranscript(videoId, { lang: 'en' })
-      ];
+// Add this function to extract video ID from YouTube URL
+function extractVideoId(url: string): string | null {
+  const patterns = [
+    /(?:v=|\/)([\w-]{11})(?:\S+)?$/,
+    /(?:embed\/)([\w-]{11})(?:\S+)?$/,
+    /(?:watch\?v=)([\w-]{11})(?:\S+)?$/
+  ];
 
-      for (const method of methods) {
-        try {
-          const result = await method();
-          if (result && result.length > 0) {
-            return result;
-          }
-        } catch (error) {
-          console.log(`Method failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
-          continue;
-        }
-      }
-    } catch (error) {
-      if (i === retries - 1) throw error;
-      await new Promise(resolve => setTimeout(resolve, 1000 * (i + 1)));
-    }
+  for (const pattern of patterns) {
+    const match = url.match(pattern);
+    if (match) return match[1];
   }
-  throw new Error('Failed to fetch transcript after multiple attempts');
+  return null;
+}
+
+function calculateTotalDuration(transcript: TranscriptItem[]): number {
+  return transcript.reduce((total, item) => {
+    return total + (item.duration || 0);
+  }, 0);
+}
+
+function extractTitleFromTranscript(transcript: TranscriptItem[]): string {
+  // Try to find a good title from the first few transcript items
+  const firstFewLines = transcript.slice(0, 3).map(item => item.text);
+  const possibleTitle = firstFewLines.find(text => 
+    text.length > 20 && 
+    !text.toLowerCase().includes('subscribe') && 
+    !text.toLowerCase().includes('like')
+  );
+  
+  return possibleTitle || 'Untitled Video';
 }
 
 export async function POST(req: Request) {
   try {
     const { url } = await req.json();
     
-    const video_id = url.match(/(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})/)?.[1];
-    
-    if (!video_id) {
-      return NextResponse.json(
-        { error: 'Invalid YouTube URL' },
-        { status: 400 }
-      );
+    if (!url) {
+      return NextResponse.json({ error: 'URL is required' }, { status: 400 });
     }
 
-    const oembedResponse = await fetch(
-      `https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v=${video_id}&format=json`
-    );
-    
-    if (!oembedResponse.ok) {
-      return NextResponse.json(
-        { error: 'Video not found or inaccessible' },
-        { status: 404 }
-      );
+    const videoId = extractVideoId(url);
+    if (!videoId) {
+      return NextResponse.json({ error: 'Invalid YouTube URL' }, { status: 400 });
     }
 
-    const videoData = await oembedResponse.json();
-    
-    try {
-      const transcript = await fetchTranscriptWithRetry(video_id);
-      const transcriptText = transcript.map((item: TranscriptItem) => item.text).join(' ');
-      const duration = transcript.reduce((acc: number, item: TranscriptItem) => acc + (item.duration || 0), 0);
+    const transcript = await YoutubeTranscript.fetchTranscript(videoId);
 
-      const videoDetails = {
-        title: videoData.title,
-        duration,
-        video_id,
-        youtube_url: url,
-        transcript: transcriptText
-      };
+    // Calculate total duration and extract title from transcript
+    const duration = calculateTotalDuration(transcript);
+    const title = extractTitleFromTranscript(transcript);
 
-      const { error: dbError } = await supabase
-        .from('videos')
-        .insert([videoDetails]);
+    // Store in Supabase
+    const { data, error } = await supabase
+      .from('videos')
+      .insert([
+        {
+          youtube_url: url,
+          video_id: videoId,
+          title,
+          duration,
+          transcript: JSON.stringify(transcript)
+        }
+      ])
+      .select()
+      .single();
 
-      if (dbError) throw dbError;
-
-      return NextResponse.json(videoDetails);
-    } catch (transcriptError) {
-      console.error('Transcript Error:', transcriptError);
-      return NextResponse.json(
-        { error: 'Unable to fetch video transcript. Please ensure the video has captions enabled.' },
-        { status: 400 }
-      );
+    if (error) {
+      console.error('Supabase error:', error);
+      return NextResponse.json({ error: 'Failed to store video data' }, { status: 500 });
     }
+
+    return NextResponse.json({
+      transcript,
+      video_id: videoId,
+      title,
+      duration,
+      ...data
+    });
+    
   } catch (error) {
-    console.error('API Error:', error);
+    console.error('Error:', error);
     return NextResponse.json(
       { error: error instanceof Error ? error.message : 'Failed to process video' },
-      { status: 500 }
+      { status: 400 }
     );
   }
 }
