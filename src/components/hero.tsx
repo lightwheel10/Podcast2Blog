@@ -9,6 +9,7 @@ import { supabase } from "@/src/lib/supabase"
 import { toast } from "sonner"
 import { useRouter } from "next/navigation"
 import { LoadingSpinner } from "@/src/ui/loading-spinner"
+import { fetchTranscript, calculateTotalDuration, extractTitleFromTranscript, extractVideoId } from "@/src/lib/transcript-service"
 
 export function Hero() {
   const router = useRouter()
@@ -18,34 +19,41 @@ export function Hero() {
   const [isProcessed, setIsProcessed] = useState(false)
 
   const handleConvert = async () => {
-    if (!youtubeUrl) return
+    if (!youtubeUrl) return;
     
     startTransition(async () => {
       try {
-        const videoDetails = await getVideoDetails(youtubeUrl)
+        const videoId = extractVideoId(youtubeUrl);
+        if (!videoId) {
+          throw new Error('Invalid YouTube URL');
+        }
+
+        const transcript = await fetchTranscript(videoId);
+        const duration = calculateTotalDuration(transcript);
+        const title = extractTitleFromTranscript(transcript);
         
         const { data, error } = await supabase
           .from('videos')
           .insert([
             {
               youtube_url: youtubeUrl,
-              title: videoDetails.title,
-              duration: videoDetails.duration,
-              video_id: videoDetails.video_id,
-              transcript: videoDetails.transcript
+              title,
+              duration,
+              video_id: videoId,
+              transcript: JSON.stringify(transcript)
             }
           ])
           .select()
-          .single()
+          .single();
 
-        if (error) throw error
+        if (error) throw error;
 
-        toast.success('Video processed successfully!')
-        setVideoId(data.id)
-        setIsProcessed(true)
+        toast.success('Video processed successfully!');
+        setVideoId(data.id);
+        setIsProcessed(true);
         
       } catch (error) {
-        console.error('Error fetching video details:', error);
+        console.error('Error processing video:', error);
         toast.error(
           error instanceof Error 
             ? error.message 
