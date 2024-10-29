@@ -18,37 +18,36 @@ export function Hero() {
   const [isProcessed, setIsProcessed] = useState(false)
 
   const handleConvert = async () => {
-    if (!youtubeUrl) return
+    if (!youtubeUrl) return;
     
     startTransition(async () => {
       try {
-        const videoDetails = await getVideoDetails(youtubeUrl)
-        
-        const { data, error } = await supabase
-          .from('videos')
-          .insert([
-            {
-              youtube_url: youtubeUrl,
-              title: videoDetails.title,
-              duration: videoDetails.duration,
-              video_id: videoDetails.videoId,
-              transcript: videoDetails.transcript
-            }
-          ])
-          .select()
-          .single()
+        const response = await fetch('/api/transcript', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url: youtubeUrl }),
+        });
 
-        if (error) throw error
-
-        toast.success('Video processed successfully!')
-        setVideoId(data.id)
-        setIsProcessed(true)
+        const data = await response.json();
         
-      } catch {
-        toast.error('Failed to process video. Please try again.')
+        if (!response.ok) {
+          throw new Error(data.error || 'Failed to process video');
+        }
+
+        toast.success('Video processed successfully!');
+        setVideoId(data.id);
+        setIsProcessed(true);
+        
+      } catch (error) {
+        console.error('Error fetching video details:', error);
+        toast.error(
+          error instanceof Error 
+            ? error.message 
+            : 'Failed to process video. Please try again.'
+        );
       }
-    })
-  }
+    });
+  };
 
   const handleGenerateBlog = () => {
     if (videoId) {
