@@ -82,51 +82,59 @@ export async function fetchTranscript(videoId: string): Promise<TranscriptItem[]
 }
 
 async function fetchYouTubeTranscript(videoId: string): Promise<TranscriptItem[]> {
-  if (!process.env.NEXT_PUBLIC_YOUTUBE_API_KEY) {
-    throw new Error('YouTube API key is required for fallback method');
-  }
-
-  const apiKey = process.env.NEXT_PUBLIC_YOUTUBE_API_KEY;
+  const apiKey = process.env.YOUTUBE_API_KEY;
   
-  // First, get the caption tracks
-  const captionsResponse = await fetch(
-    `https://youtube.googleapis.com/youtube/v3/captions?` +
-    `part=snippet&videoId=${videoId}&key=${apiKey}`
-  );
-
-  if (!captionsResponse.ok) {
-    throw new Error('Failed to fetch captions from YouTube API');
+  if (!apiKey) {
+    console.error('YouTube API key not found in environment');
+    throw new Error('YouTube API configuration error');
   }
 
-  const captionsData = await captionsResponse.json() as YouTubeCaptionResponse;
-  console.log('Available captions:', captionsData);
+  try {
+    // First, get the caption tracks
+    const captionsResponse = await fetch(
+      `https://youtube.googleapis.com/youtube/v3/captions?` +
+      `part=snippet&videoId=${videoId}&key=${apiKey}`
+    );
 
-  // Get the first English caption track or any caption track if English isn't available
-  const captionTrack = captionsData.items?.find(
-    (item) => item.snippet.language === 'en'
-  ) || captionsData.items?.[0];
+    if (!captionsResponse.ok) {
+      const errorData = await captionsResponse.json();
+      console.error('YouTube API Error:', errorData);
+      throw new Error('Failed to fetch captions from YouTube API');
+    }
 
-  if (!captionTrack) {
-    throw new Error('No caption tracks found');
+    const captionsData = await captionsResponse.json() as YouTubeCaptionResponse;
+    console.log('Available captions:', captionsData);
+
+    // Get the first English caption track or any caption track if English isn't available
+    const captionTrack = captionsData.items?.find(
+      (item) => item.snippet.language === 'en'
+    ) || captionsData.items?.[0];
+
+    if (!captionTrack) {
+      throw new Error('No caption tracks found');
+    }
+
+    // Get the actual transcript content
+    const transcriptResponse = await fetch(
+      `https://youtube.googleapis.com/youtube/v3/captions/${captionTrack.id}?key=${apiKey}`
+    );
+
+    if (!transcriptResponse.ok) {
+      throw new Error('Failed to fetch transcript content');
+    }
+
+    const transcriptData = await transcriptResponse.json();
+
+    // Format the response to match TranscriptItem interface
+    return [{
+      text: transcriptData.text || '',
+      duration: 0, // YouTube API doesn't provide duration
+      offset: 0    // YouTube API doesn't provide offset
+    }];
+  } catch (error) {
+    console.error('YouTube API call failed:', error);
+    throw error;
   }
-
-  // Get the actual transcript content
-  const transcriptResponse = await fetch(
-    `https://youtube.googleapis.com/youtube/v3/captions/${captionTrack.id}?key=${apiKey}`
-  );
-
-  if (!transcriptResponse.ok) {
-    throw new Error('Failed to fetch transcript content');
-  }
-
-  const transcriptData = await transcriptResponse.json();
-
-  // Format the response to match TranscriptItem interface
-  return [{
-    text: transcriptData.text || '',
-    duration: 0, // YouTube API doesn't provide duration
-    offset: 0    // YouTube API doesn't provide offset
-  }];
 }
 
 export function calculateTotalDuration(transcript: TranscriptItem[]): number {
