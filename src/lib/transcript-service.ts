@@ -25,12 +25,6 @@ interface YouTubeCaptionItem {
   snippet: YouTubeCaptionSnippet;
 }
 
-interface YouTubeCaptionResponse {
-  kind: string;
-  etag: string;
-  items: YouTubeCaptionItem[];
-}
-
 export async function fetchTranscript(videoId: string): Promise<TranscriptItem[]> {
   const MAX_RETRIES = 3;
   let lastError: Error | null = null;
