@@ -33,6 +33,33 @@ export function extractVideoId(url: string): string | null {
   return null;
 }
 
+const MAX_RETRIES = 3;
+const INITIAL_RETRY_DELAY = 1000; // 1 second
+
+async function fetchWithRetry(url: string, options: RequestInit, retries = MAX_RETRIES): Promise<Response> {
+  try {
+    const response = await fetch(url, options);
+    
+    if (!response.ok) {
+      if (retries > 0 && (response.status === 429 || response.status >= 500)) {
+        const delay = INITIAL_RETRY_DELAY * (MAX_RETRIES - retries + 1);
+        await new Promise(resolve => setTimeout(resolve, delay));
+        return fetchWithRetry(url, options, retries - 1);
+      }
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    
+    return response;
+  } catch (error) {
+    if (retries > 0) {
+      const delay = INITIAL_RETRY_DELAY * (MAX_RETRIES - retries + 1);
+      await new Promise(resolve => setTimeout(resolve, delay));
+      return fetchWithRetry(url, options, retries - 1);
+    }
+    throw error;
+  }
+}
+
 export async function processVideo(youtubeUrl: string): Promise<VideoDetails> {
   try {
     const videoId = extractVideoId(youtubeUrl);
@@ -40,7 +67,7 @@ export async function processVideo(youtubeUrl: string): Promise<VideoDetails> {
       throw new Error('Invalid YouTube URL');
     }
 
-    const response = await fetch('/api/transcript', {
+    const response = await fetchWithRetry('/api/transcript', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -49,12 +76,12 @@ export async function processVideo(youtubeUrl: string): Promise<VideoDetails> {
       })
     });
 
+    const data = await response.json();
+    
     if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.message || 'Failed to fetch transcript');
+      throw new Error(data.error || 'Failed to fetch transcript');
     }
 
-    const data = await response.json();
     return data;
   } catch (error) {
     console.error('Error processing video:', error);

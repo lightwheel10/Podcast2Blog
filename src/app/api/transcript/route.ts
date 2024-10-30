@@ -1,20 +1,45 @@
 import { NextResponse } from 'next/server';
 import { supabase } from '@/src/lib/supabase';
 
-const CLOUD_RUN_URL = 'https://fetch-transcript-227301753523.asia-south1.run.app/fetch-transcript';
+const CLOUD_RUN_URL = process.env.CLOUD_RUN_URL!;
+const MAX_RETRIES = 3;
+const INITIAL_RETRY_DELAY = 1000;
+
+async function fetchWithRetry(url: string, options: RequestInit, retries = MAX_RETRIES) {
+  try {
+    const response = await fetch(url, options);
+    
+    if (!response.ok) {
+      if (retries > 0 && (response.status === 429 || response.status >= 500)) {
+        const delay = INITIAL_RETRY_DELAY * (MAX_RETRIES - retries + 1);
+        await new Promise(resolve => setTimeout(resolve, delay));
+        return fetchWithRetry(url, options, retries - 1);
+      }
+      const error = await response.json();
+      throw new Error(error.error || `HTTP error! status: ${response.status}`);
+    }
+    
+    return response;
+  } catch (error) {
+    if (retries > 0) {
+      const delay = INITIAL_RETRY_DELAY * (MAX_RETRIES - retries + 1);
+      await new Promise(resolve => setTimeout(resolve, delay));
+      return fetchWithRetry(url, options, retries - 1);
+    }
+    throw error;
+  }
+}
 
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    console.log('Received request body:', body);
-
     const { videoId, youtubeUrl } = body;
     
     if (!videoId || !youtubeUrl) {
       return NextResponse.json({ error: 'Invalid request data' }, { status: 400 });
     }
 
-    // First check if video exists in Supabase
+    // Check cache first
     const { data: existingVideo } = await supabase
       .from('videos')
       .select('*')
@@ -30,24 +55,16 @@ export async function POST(req: Request) {
       });
     }
 
-    console.log('Fetching transcript for video:', videoId);
-
-    // Call Cloud Run with just videoId
-    const transcriptResponse = await fetch(CLOUD_RUN_URL, {
+    // Fetch from Cloud Run with retries
+    const transcriptResponse = await fetchWithRetry(CLOUD_RUN_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ videoId })
     });
 
-    if (!transcriptResponse.ok) {
-      const errorData = await transcriptResponse.json();
-      throw new Error(errorData.error || 'Failed to fetch from Cloud Run');
-    }
-
     const transcriptData = await transcriptResponse.json();
-    console.log('Received transcript data');
 
-    // Store in Supabase with complete data
+    // Store in Supabase
     const { data: videoData, error: dbError } = await supabase
       .from('videos')
       .insert({
@@ -60,7 +77,6 @@ export async function POST(req: Request) {
       .single();
 
     if (dbError) {
-      console.error('Supabase error:', dbError);
       throw dbError;
     }
 
