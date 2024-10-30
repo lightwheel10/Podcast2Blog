@@ -35,7 +35,6 @@ export function extractVideoId(url: string): string | null {
   return null;
 }
 
-// Single function to handle transcript fetching and storage
 export async function processVideo(youtubeUrl: string): Promise<VideoDetails> {
   try {
     const videoId = extractVideoId(youtubeUrl);
@@ -43,11 +42,11 @@ export async function processVideo(youtubeUrl: string): Promise<VideoDetails> {
       throw new Error('Invalid YouTube URL');
     }
 
-    // Call Cloud Run service
-    const response = await fetch(process.env.CLOUD_RUN_URL!, {
+    // Call our API route instead of Cloud Run directly
+    const response = await fetch('/api/transcript', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ videoId })
+      body: JSON.stringify({ youtubeUrl })
     });
 
     if (!response.ok) {
@@ -56,30 +55,8 @@ export async function processVideo(youtubeUrl: string): Promise<VideoDetails> {
     }
 
     const data = await response.json();
+    return data;
 
-    // Store in Supabase
-    const { data: videoData, error: dbError } = await supabase
-      .from('videos')
-      .insert([{
-        youtube_url: youtubeUrl,
-        video_id: videoId,
-        transcript: data.transcript,
-        original_language: data.originalLanguage
-      }])
-      .select()
-      .single();
-
-    if (dbError) throw dbError;
-
-    return {
-      title: videoData.title || 'Untitled Video',
-      duration: calculateDuration(data.transcript),
-      video_id: videoId,
-      youtube_url: youtubeUrl,
-      transcript: data.transcript,
-      originalLanguage: data.originalLanguage,
-      id: videoData.id
-    };
   } catch (error) {
     console.error('Error processing video:', error);
     throw error instanceof Error 
