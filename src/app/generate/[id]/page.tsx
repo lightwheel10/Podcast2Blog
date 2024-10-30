@@ -7,10 +7,12 @@ interface PageProps {
   params: Promise<{
     id: string;
   }>;
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
 }
 
 export default async function GeneratePage({ 
-  params 
+  params,
+  searchParams 
 }: PageProps) {
   const resolvedParams = await params;
   const id = resolvedParams.id;
@@ -26,6 +28,7 @@ export default async function GeneratePage({
     .single();
 
   if (error || !video) {
+    console.error('Error fetching video:', error);
     redirect('/');
   }
 
@@ -41,7 +44,7 @@ export default async function GeneratePage({
         title={video.title || 'Untitled Video'}
         duration={video.duration || 0}
         video_id={video.video_id}
-        id={video.id}
+        id={video.id.toString()}
         thumbnailUrl={thumbnailUrl}
       />
 

@@ -16,7 +16,7 @@ export function Hero() {
   const router = useRouter()
   const [youtubeUrl, setYoutubeUrl] = useState("")
   const [isPending, startTransition] = useTransition()
-  const [videoId, setVideoId] = useState<string | null>(null)
+  const [videoData, setVideoData] = useState<{ id: string; video_id: string } | null>(null)
   const [isProcessed, setIsProcessed] = useState(false)
 
   const handleConvert = async () => {
@@ -35,7 +35,11 @@ export function Hero() {
         const videoDetails = await processVideo(youtubeUrl);
         toast.dismiss(transcriptToastId);
         toast.success('Video processed successfully!');
-        setVideoId(videoDetails.video_id);
+        
+        setVideoData({
+          id: videoDetails.id.toString(),
+          video_id: videoDetails.video_id
+        });
         setIsProcessed(true);
         
       } catch (error) {
@@ -51,8 +55,8 @@ export function Hero() {
   };
 
   const handleGenerateBlog = () => {
-    if (videoId) {
-      router.push(`/generate/${videoId}`)
+    if (videoData?.id) {
+      router.push(`/generate/${videoData.id}`);
     }
   }
 
