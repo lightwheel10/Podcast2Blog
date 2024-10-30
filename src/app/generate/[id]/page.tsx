@@ -4,18 +4,17 @@ import { supabase } from '@/src/lib/supabase';
 import { notFound, redirect } from 'next/navigation';
 
 interface PageProps {
-  params: Promise<{
-    id: string;
-  }>;
+  params: Promise<{ id: string }>;
   searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
 }
 
 export default async function GeneratePage({ 
   params,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   searchParams 
 }: PageProps) {
   const resolvedParams = await params;
-  const id = resolvedParams.id;
+  const { id } = resolvedParams;
 
   if (!id || typeof id !== 'string') {
     return notFound();

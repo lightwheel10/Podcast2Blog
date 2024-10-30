@@ -1,5 +1,3 @@
-import { supabase } from '@/src/lib/supabase';
-
 interface TranscriptItem {
   text: string;
   duration: number;
@@ -63,8 +61,3 @@ export async function processVideo(youtubeUrl: string): Promise<VideoDetails> {
       : new Error('Failed to process video');
   }
 }
-
-// Used in processVideo, so not unused
-function calculateDuration(transcript: TranscriptItem[]): number {
-  return transcript.reduce((total, item) => total + item.duration, 0);
-} 
