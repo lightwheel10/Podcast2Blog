@@ -43,7 +43,7 @@ export async function processVideo(youtubeUrl: string): Promise<VideoDetails> {
     const response = await fetch('/api/transcript', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ youtubeUrl })
+      body: JSON.stringify({ videoId })
     });
 
     if (!response.ok) {

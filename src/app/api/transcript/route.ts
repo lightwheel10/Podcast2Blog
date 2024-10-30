@@ -9,8 +9,7 @@ export async function POST(req: Request) {
     const body = await req.json();
     console.log('Received request body:', body);
 
-    const youtubeUrl = body.youtubeUrl || body.videoId;
-    const videoId = extractVideoId(youtubeUrl) || youtubeUrl;
+    const videoId = body.videoId || extractVideoId(body.youtubeUrl);
     
     if (!videoId) {
       return NextResponse.json({ error: 'Invalid YouTube URL or video ID' }, { status: 400 });
@@ -52,7 +51,7 @@ export async function POST(req: Request) {
     const { data: videoData, error: dbError } = await supabase
       .from('videos')
       .insert({
-        youtube_url: youtubeUrl,
+        youtube_url: body.youtubeUrl,
         video_id: videoId,
         transcript: transcriptData.transcript,
         original_language: transcriptData.originalLanguage,

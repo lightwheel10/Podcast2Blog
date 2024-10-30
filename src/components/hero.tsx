@@ -32,19 +32,23 @@ export function Hero() {
 
         const transcriptToastId = toast.loading('Fetching transcript...');
         
-        const videoDetails = await processVideo(youtubeUrl);
-        toast.dismiss(transcriptToastId);
-        toast.success('Video processed successfully!');
-        
-        setVideoData({
-          id: videoDetails.id.toString(),
-          video_id: videoDetails.video_id
-        });
-        setIsProcessed(true);
+        try {
+          const videoDetails = await processVideo(youtubeUrl);
+          toast.dismiss(transcriptToastId);
+          toast.success('Video processed successfully!');
+          
+          setVideoData({
+            id: videoDetails.id.toString(),
+            video_id: videoDetails.video_id
+          });
+          setIsProcessed(true);
+        } catch (error) {
+          toast.dismiss(transcriptToastId);
+          throw error;
+        }
         
       } catch (error) {
         console.error('Error processing video:', error);
-        toast.dismiss();
         toast.error(
           error instanceof Error 
             ? error.message 
