@@ -10,10 +10,10 @@ export async function POST(req: Request) {
     console.log('Received request body:', body);
 
     const youtubeUrl = body.youtubeUrl;
-    const videoId = body.videoId || extractVideoId(youtubeUrl);
+    const videoId = extractVideoId(youtubeUrl);
     
     if (!videoId) {
-      return NextResponse.json({ error: 'Invalid YouTube URL or video ID' }, { status: 400 });
+      return NextResponse.json({ error: 'Invalid YouTube URL' }, { status: 400 });
     }
 
     // First check if video exists in Supabase
@@ -34,7 +34,7 @@ export async function POST(req: Request) {
 
     console.log('Fetching transcript for video:', videoId);
 
-    // If not in database, fetch from Cloud Run
+    // Call Cloud Run with just videoId
     const transcriptResponse = await fetch(CLOUD_RUN_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -56,7 +56,7 @@ export async function POST(req: Request) {
         youtube_url: youtubeUrl,
         video_id: videoId,
         transcript: transcriptData.transcript,
-        original_language: transcriptData.originalLanguage || 'en'  // Provide default
+        original_language: transcriptData.originalLanguage || 'en'
       })
       .select()
       .single();
