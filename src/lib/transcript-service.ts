@@ -4,20 +4,6 @@ interface TranscriptItem {
   offset: number;
 }
 
-// YouTube API response interfaces
-interface YouTubeCaptionSnippet {
-  language: string;
-  name: string;
-  audioTrackType: string;
-  isAutoSynced: boolean;
-  isCC: boolean;
-  isDraft: boolean;
-  isEasyReader: boolean;
-  isLarge: boolean;
-  status: string;
-  trackKind: string;
-}
-
 export async function fetchTranscript(videoId: string): Promise<TranscriptItem[]> {
   const MAX_RETRIES = 3;
   let lastError: Error | null = null;
