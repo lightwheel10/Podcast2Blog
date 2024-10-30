@@ -1,38 +1,33 @@
-from flask import Flask, request, jsonify, render_template, url_for
+from flask import Flask, request, jsonify
 from flask_cors import CORS
 from youtube_transcript_api import YouTubeTranscriptApi
-import re
+import time
+import random
+from fake_useragent import UserAgent
 import os
 
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}})
 
-def extract_video_id(url):
-    patterns = [
-        r'(?:youtube\.com\/watch\?v=|youtu.be\/)([\w-]+)',
-        r'(?:youtube\.com\/embed\/)([\w-]+)'
-    ]
+MAX_RETRIES = int(os.getenv('MAX_RETRIES', 3))
+RETRY_DELAY = int(os.getenv('RETRY_DELAY', 2))
+
+def get_random_user_agent():
+    ua = UserAgent()
+    return ua.random
+
+def get_transcript_with_retry(video_id):
+    last_error = None
     
-    for pattern in patterns:
-        match = re.search(pattern, url)
-        if match:
-            return match.group(1)
-    return None
-
-@app.route('/fetch-transcript', methods=['POST'])  
-def get_transcript():
-    try:
-        data = request.json
-        video_id = data.get('videoId')  
-        
-        if not video_id:
-            return jsonify({'error': 'No video ID provided'}), 400
-
+    for attempt in range(MAX_RETRIES):
         try:
+            headers = {'User-Agent': get_random_user_agent()}
+            
             transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
             transcript = None
             original_language = None
             
+            # Try different methods to get transcript
             try:
                 transcript = transcript_list.find_manually_created_transcript(['en'])
                 original_language = 'en (manual)'
@@ -52,32 +47,42 @@ def get_transcript():
 
             transcript_data = transcript.fetch()
             
-            formatted_transcript = [{
-                'text': entry['text'],
-                'duration': entry['duration'] * 1000,  # Convert to milliseconds
-                'offset': entry['start'] * 1000       # Convert to milliseconds
-            } for entry in transcript_data]
-            
-            return jsonify({
-                'transcript': formatted_transcript,
+            return {
+                'transcript': [{
+                    'text': entry['text'],
+                    'duration': entry['duration'] * 1000,
+                    'offset': entry['start'] * 1000
+                } for entry in transcript_data],
                 'originalLanguage': original_language
-            })
+            }
 
         except Exception as e:
-            available_transcripts = YouTubeTranscriptApi.list_transcripts(video_id)
-            manual_langs = [f"{lang}" for lang in available_transcripts._manually_created_transcripts.keys()]
-            auto_langs = [f"{lang}" for lang in available_transcripts._generated_transcripts.keys()]
-            
-            error_message = f"Error getting transcript. Available languages:\n"
-            if manual_langs:
-                error_message += f"\nManual transcripts: {', '.join(manual_langs)}"
-            if auto_langs:
-                error_message += f"\nAuto-generated transcripts: {', '.join(auto_langs)}"
-                
-            return jsonify({'error': error_message}), 500
+            last_error = e
+            if attempt < MAX_RETRIES - 1:
+                time.sleep(RETRY_DELAY * (attempt + 1))  # Exponential backoff
+                continue
+            raise last_error
+
+@app.route('/fetch-transcript', methods=['POST', 'OPTIONS'])
+def get_transcript():
+    if request.method == 'OPTIONS':
+        return ('', 204)
+
+    try:
+        data = request.json
+        video_id = data.get('videoId')
+        
+        if not video_id:
+            return jsonify({'error': 'No video ID provided'}), 400
+
+        result = get_transcript_with_retry(video_id)
+        return jsonify(result)
 
     except Exception as e:
-        return jsonify({'error': f'Error processing request: {str(e)}'}), 500
+        error_message = str(e)
+        print(f"Error processing request: {error_message}")
+        return jsonify({'error': f'Error processing request: {error_message}'}), 500
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 8080))) 
+    port = int(os.getenv('PORT', 8080))
+    app.run(host='0.0.0.0', port=port) 
