@@ -14,8 +14,8 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Invalid YouTube URL or video ID' }, { status: 400 });
     }
 
-    // Call Cloud Function to get transcript
-    const response = await fetch(process.env.NEXT_PUBLIC_TRANSCRIPT_FUNCTION_URL!, {
+    // Call Cloud Run service
+    const response = await fetch(process.env.NEXT_PUBLIC_CLOUD_RUN_URL!, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ videoId })
@@ -34,7 +34,8 @@ export async function POST(req: Request) {
         {
           youtube_url: youtubeUrl,
           video_id: videoId,
-          transcript: JSON.stringify(transcriptData.transcript)
+          transcript: JSON.stringify(transcriptData.transcript),
+          original_language: transcriptData.originalLanguage
         }
       ])
       .select()
@@ -45,6 +46,7 @@ export async function POST(req: Request) {
     return NextResponse.json({
       success: true,
       transcript: transcriptData.transcript,
+      originalLanguage: transcriptData.originalLanguage,
       videoId: videoData.id
     });
 

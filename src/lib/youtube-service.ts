@@ -4,12 +4,18 @@ interface TranscriptItem {
   offset: number;
 }
 
+export interface TranscriptResponse {
+  transcript: TranscriptItem[];
+  originalLanguage: string;
+}
+
 export interface VideoDetails {
   title: string;
   duration: number;
   video_id: string;
   youtube_url: string;
-  transcript: string;
+  transcript: TranscriptItem[];
+  originalLanguage: string;
   videoDetails: {
     snippet: {
       title: string;
@@ -56,7 +62,8 @@ export async function getVideoDetails(videoId: string): Promise<VideoDetails> {
       duration: parseDuration(data.videoDetails.contentDetails.duration),
       video_id: videoId,
       youtube_url: `https://youtube.com/watch?v=${videoId}`,
-      transcript: JSON.stringify(data.transcript),
+      transcript: data.transcript,
+      originalLanguage: data.originalLanguage,
       videoDetails: data.videoDetails
     };
   } catch (error) {
