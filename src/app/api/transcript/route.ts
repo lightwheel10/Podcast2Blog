@@ -9,32 +9,15 @@ export async function POST(req: Request) {
     const body = await req.json();
     console.log('Received request body:', body);
 
-    const youtubeUrl = body.youtubeUrl;
-    const videoId = extractVideoId(youtubeUrl);
+    const videoId = body.videoId;
     
     if (!videoId) {
-      return NextResponse.json({ error: 'Invalid YouTube URL' }, { status: 400 });
-    }
-
-    // First check if video exists in Supabase
-    const { data: existingVideo } = await supabase
-      .from('videos')
-      .select('*')
-      .eq('video_id', videoId)
-      .single();
-
-    if (existingVideo) {
-      return NextResponse.json({
-        success: true,
-        transcript: existingVideo.transcript,
-        originalLanguage: existingVideo.original_language,
-        videoId: existingVideo.id
-      });
+      return NextResponse.json({ error: 'Invalid video ID' }, { status: 400 });
     }
 
     console.log('Fetching transcript for video:', videoId);
 
-    // Call Cloud Run with just videoId
+    // Call Cloud Run with the exact same videoId
     const transcriptResponse = await fetch(CLOUD_RUN_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -53,7 +36,7 @@ export async function POST(req: Request) {
     const { data: videoData, error: dbError } = await supabase
       .from('videos')
       .insert({
-        youtube_url: youtubeUrl,
+        youtube_url: body.youtubeUrl,
         video_id: videoId,
         transcript: transcriptData.transcript,
         original_language: transcriptData.originalLanguage || 'en'
