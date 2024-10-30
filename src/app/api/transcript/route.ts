@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
 import { supabase } from '@/src/lib/supabase';
-import { extractVideoId } from '@/src/lib/youtube-service';
 
 const CLOUD_RUN_URL = 'https://fetch-transcript-227301753523.asia-south1.run.app/fetch-transcript';
 
@@ -9,15 +8,31 @@ export async function POST(req: Request) {
     const body = await req.json();
     console.log('Received request body:', body);
 
-    const videoId = body.videoId;
+    const { videoId, youtubeUrl } = body;
     
-    if (!videoId) {
-      return NextResponse.json({ error: 'Invalid video ID' }, { status: 400 });
+    if (!videoId || !youtubeUrl) {
+      return NextResponse.json({ error: 'Invalid request data' }, { status: 400 });
+    }
+
+    // First check if video exists in Supabase
+    const { data: existingVideo } = await supabase
+      .from('videos')
+      .select('*')
+      .eq('video_id', videoId)
+      .single();
+
+    if (existingVideo) {
+      return NextResponse.json({
+        success: true,
+        transcript: existingVideo.transcript,
+        originalLanguage: existingVideo.original_language,
+        videoId: existingVideo.id
+      });
     }
 
     console.log('Fetching transcript for video:', videoId);
 
-    // Call Cloud Run with the exact same videoId
+    // Call Cloud Run with just videoId
     const transcriptResponse = await fetch(CLOUD_RUN_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -32,11 +47,11 @@ export async function POST(req: Request) {
     const transcriptData = await transcriptResponse.json();
     console.log('Received transcript data');
 
-    // Store in Supabase
+    // Store in Supabase with complete data
     const { data: videoData, error: dbError } = await supabase
       .from('videos')
       .insert({
-        youtube_url: body.youtubeUrl,
+        youtube_url: youtubeUrl,
         video_id: videoId,
         transcript: transcriptData.transcript,
         original_language: transcriptData.originalLanguage || 'en'
