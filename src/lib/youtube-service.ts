@@ -42,7 +42,7 @@ export async function processVideo(youtubeUrl: string): Promise<VideoDetails> {
       throw new Error('Invalid YouTube URL');
     }
 
-    // Call our API route instead of Cloud Run directly
+    // Call our API route to get transcript from Cloud Run
     const response = await fetch('/api/transcript', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -55,7 +55,30 @@ export async function processVideo(youtubeUrl: string): Promise<VideoDetails> {
     }
 
     const data = await response.json();
-    return data;
+
+    // Store in Supabase
+    const { data: videoData, error: dbError } = await supabase
+      .from('videos')
+      .insert([{
+        youtube_url: youtubeUrl,
+        video_id: videoId,
+        transcript: data.transcript,
+        original_language: data.originalLanguage
+      }])
+      .select()
+      .single();
+
+    if (dbError) throw dbError;
+
+    return {
+      title: videoData.title || 'Untitled Video',
+      duration: calculateDuration(data.transcript),
+      video_id: videoId,
+      youtube_url: youtubeUrl,
+      transcript: data.transcript,
+      originalLanguage: data.originalLanguage,
+      id: videoData.id
+    };
 
   } catch (error) {
     console.error('Error processing video:', error);
