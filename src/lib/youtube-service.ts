@@ -1,3 +1,5 @@
+import { supabase } from '@/src/lib/supabase';
+
 interface TranscriptItem {
   text: string;
   duration: number;
@@ -16,15 +18,7 @@ export interface VideoDetails {
   youtube_url: string;
   transcript: TranscriptItem[];
   originalLanguage: string;
-  videoDetails: {
-    snippet: {
-      title: string;
-      description: string;
-    };
-    contentDetails: {
-      duration: string;
-    };
-  };
+  id: number;
 }
 
 export function extractVideoId(url: string): string | null {
@@ -41,66 +35,59 @@ export function extractVideoId(url: string): string | null {
   return null;
 }
 
-export async function getVideoDetails(videoId: string): Promise<VideoDetails> {
+// Single function to handle transcript fetching and storage
+export async function processVideo(youtubeUrl: string): Promise<VideoDetails> {
   try {
-    const response = await fetch('/api/transcript', {
+    const videoId = extractVideoId(youtubeUrl);
+    if (!videoId) {
+      throw new Error('Invalid YouTube URL');
+    }
+
+    // Call Cloud Run service
+    const response = await fetch(process.env.CLOUD_RUN_URL!, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ videoId }),
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ videoId })
     });
 
     if (!response.ok) {
-      const data = await response.json();
-      throw new Error(data.error || 'Failed to process video');
+      const error = await response.json();
+      throw new Error(error.message || 'Failed to fetch transcript');
     }
 
     const data = await response.json();
+
+    // Store in Supabase
+    const { data: videoData, error: dbError } = await supabase
+      .from('videos')
+      .insert([{
+        youtube_url: youtubeUrl,
+        video_id: videoId,
+        transcript: data.transcript,
+        original_language: data.originalLanguage
+      }])
+      .select()
+      .single();
+
+    if (dbError) throw dbError;
+
     return {
-      title: data.videoDetails.snippet.title,
-      duration: parseDuration(data.videoDetails.contentDetails.duration),
+      title: videoData.title || 'Untitled Video',
+      duration: calculateDuration(data.transcript),
       video_id: videoId,
-      youtube_url: `https://youtube.com/watch?v=${videoId}`,
+      youtube_url: youtubeUrl,
       transcript: data.transcript,
       originalLanguage: data.originalLanguage,
-      videoDetails: data.videoDetails
+      id: videoData.id
     };
   } catch (error) {
-    console.error('Error fetching video details:', error);
+    console.error('Error processing video:', error);
     throw error instanceof Error 
       ? error 
       : new Error('Failed to process video');
   }
 }
 
-function parseDuration(duration: string = 'PT0M0S'): number {
-  const match = duration.match(/PT(\d+H)?(\d+M)?(\d+S)?/);
-  const hours = (match?.[1] || '0H').slice(0, -1);
-  const minutes = (match?.[2] || '0M').slice(0, -1);
-  const seconds = (match?.[3] || '0S').slice(0, -1);
-  
-  return (parseInt(hours) * 3600 + parseInt(minutes) * 60 + parseInt(seconds)) * 1000;
-}
-
-export function calculateTotalDuration(transcript: TranscriptItem[]): number {
-  return transcript.reduce((total, item) => total + (item.duration || 0), 0);
-}
-
-export function extractTitleFromTranscript(transcript: TranscriptItem[]): string {
-  const firstFewLines = transcript.slice(0, 3).map(item => item.text);
-  const possibleTitle = firstFewLines.find(text => 
-    text.length > 20 && 
-    !text.toLowerCase().includes('subscribe') && 
-    !text.toLowerCase().includes('like')
-  );
-  
-  return possibleTitle || 'Untitled Video';
-}
-
-export function formatTranscriptForGemini(transcript: TranscriptItem[]): string {
-  return transcript
-    .map(item => item.text)
-    .join('\n')
-    .replace(/\[Music\]|\[Applause\]|\[Laughter\]/gi, '');
+function calculateDuration(transcript: TranscriptItem[]): number {
+  return transcript.reduce((total, item) => total + item.duration, 0);
 } 

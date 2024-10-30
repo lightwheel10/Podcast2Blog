@@ -4,20 +4,19 @@ import { Button } from "@/src/ui/button"
 import { Input } from "@/src/ui/input"
 import { useState, useTransition } from "react"
 import { motion } from "framer-motion"
-import { supabase } from "@/src/lib/supabase"
 import { toast } from "sonner"
 import { useRouter } from "next/navigation"
 import { LoadingSpinner } from "@/src/ui/loading-spinner"
 import { 
   extractVideoId, 
-  getVideoDetails 
+  processVideo 
 } from "@/src/lib/youtube-service"
 
 export function Hero() {
   const router = useRouter()
   const [youtubeUrl, setYoutubeUrl] = useState("")
   const [isPending, startTransition] = useTransition()
-  const [videoId, setVideoId] = useState<number | null>(null)
+  const [videoId, setVideoId] = useState<string | null>(null)
   const [isProcessed, setIsProcessed] = useState(false)
 
   const handleConvert = async () => {
@@ -33,22 +32,10 @@ export function Hero() {
 
         const transcriptToastId = toast.loading('Fetching transcript...');
         
-        const response = await fetch('/api/transcript', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ youtubeUrl })
-        });
-
-        const data = await response.json();
-        
-        if (!response.ok || data.error) {
-          toast.dismiss(transcriptToastId);
-          throw new Error(data.error || 'Failed to fetch transcript');
-        }
-
+        const videoDetails = await processVideo(youtubeUrl);
         toast.dismiss(transcriptToastId);
         toast.success('Video processed successfully!');
-        setVideoId(data.videoId);
+        setVideoId(videoDetails.video_id);
         setIsProcessed(true);
         
       } catch (error) {
