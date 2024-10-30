@@ -54,16 +54,7 @@ export async function processVideo(youtubeUrl: string): Promise<VideoDetails> {
     }
 
     const data = await response.json();
-    
-    return {
-      title: data.title || 'Untitled Video',
-      duration: data.duration || 0,
-      video_id: videoId,
-      youtube_url: youtubeUrl,
-      transcript: data.transcript,
-      originalLanguage: data.originalLanguage,
-      id: data.videoId
-    };
+    return data;
 
   } catch (error) {
     console.error('Error processing video:', error);
@@ -73,6 +64,7 @@ export async function processVideo(youtubeUrl: string): Promise<VideoDetails> {
   }
 }
 
+// Used in processVideo, so not unused
 function calculateDuration(transcript: TranscriptItem[]): number {
   return transcript.reduce((total, item) => total + item.duration, 0);
 } 
