@@ -1,3 +1,9 @@
+interface TranscriptItem {
+  text: string;
+  duration: number;
+  offset: number;
+}
+
 export interface VideoDetails {
   title: string;
   duration: number;
@@ -54,4 +60,26 @@ function parseDuration(duration: string = 'PT0M0S'): number {
   const seconds = (match?.[3] || '0S').slice(0, -1);
   
   return (parseInt(hours) * 3600 + parseInt(minutes) * 60 + parseInt(seconds)) * 1000;
+}
+
+export function calculateTotalDuration(transcript: TranscriptItem[]): number {
+  return transcript.reduce((total, item) => total + (item.duration || 0), 0);
+}
+
+export function extractTitleFromTranscript(transcript: TranscriptItem[]): string {
+  const firstFewLines = transcript.slice(0, 3).map(item => item.text);
+  const possibleTitle = firstFewLines.find(text => 
+    text.length > 20 && 
+    !text.toLowerCase().includes('subscribe') && 
+    !text.toLowerCase().includes('like')
+  );
+  
+  return possibleTitle || 'Untitled Video';
+}
+
+export function formatTranscriptForGemini(transcript: TranscriptItem[]): string {
+  return transcript
+    .map(item => item.text)
+    .join('\n')
+    .replace(/\[Music\]|\[Applause\]|\[Laughter\]/gi, '');
 } 
