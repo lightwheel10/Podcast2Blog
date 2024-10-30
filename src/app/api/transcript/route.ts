@@ -2,21 +2,26 @@ import { NextResponse } from 'next/server';
 import { supabase } from '@/src/lib/supabase';
 import { extractVideoId } from '@/src/lib/youtube-service';
 
-const CLOUD_RUN_URL = 'https://fetch-transcript-227301753523.asia-south1.run.app/fetch-transcript';
+// Type assertion for environment variable
+const CLOUD_RUN_URL = process.env.CLOUD_RUN_URL as string;
+
+// Runtime check
+if (!CLOUD_RUN_URL) {
+  throw new Error('Missing CLOUD_RUN_URL environment variable');
+}
 
 export async function POST(req: Request) {
   try {
     const body = await req.json();
     const youtubeUrl = body.youtubeUrl || body.videoId;
     
-    // Extract video ID from URL or use directly if it's already an ID
     const videoId = extractVideoId(youtubeUrl) || youtubeUrl;
     
     if (!videoId) {
       return NextResponse.json({ error: 'Invalid YouTube URL or video ID' }, { status: 400 });
     }
 
-    // First get transcript from Cloud Run
+    // TypeScript now knows this is definitely a string
     const transcriptResponse = await fetch(CLOUD_RUN_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
