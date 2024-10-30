@@ -8,7 +8,10 @@ import { supabase } from "@/src/lib/supabase"
 import { toast } from "sonner"
 import { useRouter } from "next/navigation"
 import { LoadingSpinner } from "@/src/ui/loading-spinner"
-import { fetchTranscript, calculateTotalDuration, extractTitleFromTranscript, extractVideoId } from "@/src/lib/transcript-service"
+import { 
+  extractVideoId, 
+  getVideoDetails 
+} from "@/src/lib/youtube-service"
 
 export function Hero() {
   const router = useRouter()
@@ -29,42 +32,23 @@ export function Hero() {
         }
 
         const transcriptToastId = toast.loading('Fetching transcript...');
-        const transcript = await fetchTranscript(videoId);
         
-        if (!transcript) {
+        const response = await fetch('/api/transcript', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ youtubeUrl })
+        });
+
+        const data = await response.json();
+        
+        if (!response.ok || data.error) {
           toast.dismiss(transcriptToastId);
-          toast.error('Failed to fetch transcript');
-          return;
+          throw new Error(data.error || 'Failed to fetch transcript');
         }
 
-        const duration = calculateTotalDuration(transcript);
-        const title = extractTitleFromTranscript(transcript);
-        
         toast.dismiss(transcriptToastId);
-        const savingToastId = toast.loading('Saving video data...');
-        
-        const { data, error } = await supabase
-          .from('videos')
-          .insert([
-            {
-              youtube_url: youtubeUrl,
-              title,
-              duration,
-              video_id: videoId,
-              transcript: JSON.stringify(transcript)
-            }
-          ])
-          .select()
-          .single();
-
-        if (error) {
-          toast.dismiss(savingToastId);
-          throw error;
-        }
-
-        toast.dismiss(savingToastId);
         toast.success('Video processed successfully!');
-        setVideoId(data.id);
+        setVideoId(data.videoId);
         setIsProcessed(true);
         
       } catch (error) {
