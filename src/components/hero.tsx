@@ -7,10 +7,7 @@ import { motion } from "framer-motion"
 import { toast } from "sonner"
 import { useRouter } from "next/navigation"
 import { LoadingSpinner } from "@/src/ui/loading-spinner"
-import { 
-  extractVideoId, 
-  processVideo 
-} from "@/src/lib/youtube-service"
+import { processVideo } from "@/src/lib/youtube-service"
 
 export function Hero() {
   const router = useRouter()
