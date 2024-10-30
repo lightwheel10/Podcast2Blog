@@ -43,7 +43,10 @@ export async function processVideo(youtubeUrl: string): Promise<VideoDetails> {
     const response = await fetch('/api/transcript', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ videoId })
+      body: JSON.stringify({
+        videoId,
+        youtubeUrl
+      })
     });
 
     if (!response.ok) {
@@ -53,7 +56,6 @@ export async function processVideo(youtubeUrl: string): Promise<VideoDetails> {
 
     const data = await response.json();
     return data;
-
   } catch (error) {
     console.error('Error processing video:', error);
     throw error instanceof Error 
