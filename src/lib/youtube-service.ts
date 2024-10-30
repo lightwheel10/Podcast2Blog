@@ -21,6 +21,20 @@ export interface VideoDetails {
   };
 }
 
+export function extractVideoId(url: string): string | null {
+  const patterns = [
+    /(?:v=|\/)([\w-]{11})(?:\S+)?$/,
+    /(?:embed\/)([\w-]{11})(?:\S+)?$/,
+    /(?:watch\?v=)([\w-]{11})(?:\S+)?$/
+  ];
+
+  for (const pattern of patterns) {
+    const match = url.match(pattern);
+    if (match) return match[1];
+  }
+  return null;
+}
+
 export async function getVideoDetails(videoId: string): Promise<VideoDetails> {
   try {
     const response = await fetch('/api/transcript', {

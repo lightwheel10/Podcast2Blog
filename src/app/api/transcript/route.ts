@@ -1,29 +1,29 @@
 import { NextResponse } from 'next/server';
 import { supabase } from '@/src/lib/supabase';
-import { extractVideoId } from '@/src/lib/transcript-service';
-
-const CLOUD_RUN_URL = 'https://fetch-transcript-227301753523.asia-south1.run.app/fetch-transcript';
+import { extractVideoId } from '@/src/lib/youtube-service';
 
 export async function POST(req: Request) {
   try {
-    const { youtubeUrl } = await req.json();
+    const body = await req.json();
+    const youtubeUrl = body.youtubeUrl || body.videoId;
     
-    // Extract video ID
-    const videoId = extractVideoId(youtubeUrl);
+    // Extract video ID from URL or use directly if it's already an ID
+    const videoId = extractVideoId(youtubeUrl) || youtubeUrl;
+    
     if (!videoId) {
-      return NextResponse.json({ error: 'Invalid YouTube URL' }, { status: 400 });
+      return NextResponse.json({ error: 'Invalid YouTube URL or video ID' }, { status: 400 });
     }
 
-    // Fetch transcript from Cloud Run
-    const transcriptResponse = await fetch(CLOUD_RUN_URL, {
+    // Call Cloud Function to get transcript
+    const response = await fetch(process.env.NEXT_PUBLIC_TRANSCRIPT_FUNCTION_URL!, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ videoId })
     });
 
-    const transcriptData = await transcriptResponse.json();
+    const transcriptData = await response.json();
     
-    if (!transcriptResponse.ok || transcriptData.error) {
+    if (!response.ok || transcriptData.error) {
       throw new Error(transcriptData.error || 'Failed to fetch transcript');
     }
 
